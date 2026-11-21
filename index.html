@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0f172a" />
+  <title>실시간 투표 개표 현황</title>
+  <style>
+    :root {
+      --bg: #f4f7fb;
+      --surface: #ffffff;
+      --surface-soft: #f8fafc;
+      --text: #0f172a;
+      --muted: #64748b;
+      --line: #e2e8f0;
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --danger: #dc2626;
+      --success: #059669;
+      --shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--text);
+      background: var(--bg);
+      font-family: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", Arial, sans-serif;
+      line-height: 1.5;
+    }
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+    .app-shell { min-height: 100vh; }
+    .topbar {
+      background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%);
+      color: #fff;
+      padding: 34px 20px 46px;
+    }
+    .topbar-inner, main {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+    }
+    .eyebrow {
+      margin: 0 0 10px;
+      color: #bfdbfe;
+      font-size: 0.86rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+    }
+    .title {
+      display: inline-block;
+      margin: 0;
+      outline: none;
+      border-radius: 10px;
+      font-size: clamp(1.8rem, 4vw, 3.15rem);
+      line-height: 1.15;
+      letter-spacing: -0.04em;
+      cursor: text;
+    }
+    .title:focus {
+      padding: 4px 8px;
+      margin-left: -8px;
+      background: rgba(255,255,255,.12);
+      box-shadow: 0 0 0 3px rgba(191,219,254,.55);
+    }
+    .title-hint {
+      margin: 12px 0 0;
+      color: #dbeafe;
+      font-size: .92rem;
+    }
+    main { margin-top: -24px; padding-bottom: 48px; }
+    .toolbar, .summary-card, .candidate-card, .empty-state {
+      background: var(--surface);
+      border: 1px solid rgba(226,232,240,.9);
+      box-shadow: var(--shadow);
+    }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px;
+      border-radius: var(--radius);
+    }
+    .toolbar-group { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .view-label { color: var(--muted); font-size: .9rem; font-weight: 700; margin-right: 2px; }
+    .btn {
+      border: 1px solid var(--line);
+      color: var(--text);
+      background: #fff;
+      border-radius: 10px;
+      min-height: 40px;
+      padding: 9px 13px;
+      font-weight: 700;
+      transition: .18s ease;
+    }
+    .btn:hover:not(:disabled) { transform: translateY(-1px); border-color: #94a3b8; }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .btn-primary:hover:not(:disabled) { background: var(--primary-dark); border-color: var(--primary-dark); }
+    .btn-danger { color: var(--danger); border-color: #fecaca; background: #fff; }
+    .btn-danger:hover:not(:disabled) { background: #fef2f2; border-color: #fca5a5; }
+    .btn.active { background: #dbeafe; color: #1d4ed8; border-color: #93c5fd; }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin: 18px 0;
+    }
+    .summary-card { border-radius: var(--radius); padding: 20px; }
+    .summary-label { color: var(--muted); font-size: .92rem; font-weight: 700; }
+    .summary-value { margin-top: 7px; font-size: clamp(1.7rem, 4vw, 2.55rem); font-weight: 800; letter-spacing: -.04em; }
+    .candidate-header {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; margin: 32px 0 14px;
+    }
+    .candidate-header h2 { margin: 0; font-size: 1.25rem; letter-spacing: -.02em; }
+    .candidate-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+      gap: 16px;
+    }
+    .candidate-card { border-radius: var(--radius); padding: 20px; position: relative; overflow: hidden; }
+    .candidate-card::before {
+      content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: var(--accent, var(--primary));
+    }
+    .card-top { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+    .rank-badge {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 34px; height: 30px; padding: 0 9px; border-radius: 99px;
+      background: #eff6ff; color: #1d4ed8; font-size: .82rem; font-weight: 800;
+    }
+    .candidate-name {
+      margin: 0; font-size: 1.35rem; letter-spacing: -.03em; overflow-wrap: anywhere;
+    }
+    .candidate-actions { display: flex; gap: 6px; }
+    .icon-btn {
+      border: 0; background: transparent; color: var(--muted); padding: 5px; border-radius: 7px;
+      font-size: 1.05rem;
+    }
+    .icon-btn:hover { color: var(--text); background: var(--surface-soft); }
+    .vote-number { margin: 24px 0 2px; font-size: 3rem; font-weight: 900; letter-spacing: -.06em; }
+    .vote-unit { color: var(--muted); font-size: .9rem; }
+    .vote-rate { margin-top: 14px; font-weight: 800; color: var(--success); }
+    .tally-wrap { min-height: 74px; margin-top: 18px; overflow-wrap: anywhere; }
+    .tally {
+      font-family: "Noto Sans KR", sans-serif;
+      color: var(--primary-dark); font-size: 1.5rem; font-weight: 800; letter-spacing: 1px;
+      line-height: 1.6;
+    }
+    .bar-track { height: 14px; background: #eaf0f7; border-radius: 99px; overflow: hidden; margin-top: 22px; }
+    .bar-fill {
+      height: 100%; width: 0; border-radius: inherit;
+      background: linear-gradient(90deg, var(--accent, #2563eb), #60a5fa);
+      transition: width .25s ease;
+    }
+    .bar-caption { display: flex; justify-content: space-between; color: var(--muted); font-size: .85rem; margin-top: 7px; }
+    .vote-controls { display: grid; grid-template-columns: 1fr 1.2fr; gap: 9px; margin-top: 20px; }
+    .vote-controls .btn { min-height: 45px; }
+    .btn-minus { color: var(--danger); border-color: #fecaca; }
+    .btn-plus { color: #fff; background: var(--primary); border-color: var(--primary); font-size: 1.1rem; }
+    .empty-state { padding: 40px 22px; border-radius: var(--radius); text-align: center; color: var(--muted); }
+    .empty-state strong { display: block; color: var(--text); font-size: 1.15rem; margin-bottom: 6px; }
+    .modal-backdrop {
+      position: fixed; inset: 0; display: none; place-items: center; padding: 18px;
+      background: rgba(15,23,42,.55); z-index: 20;
+    }
+    .modal-backdrop.open { display: grid; }
+    .modal {
+      width: min(440px, 100%); background: #fff; border-radius: 18px; padding: 22px;
+      box-shadow: 0 24px 80px rgba(15,23,42,.25);
+    }
+    .modal h3 { margin: 0 0 14px; font-size: 1.2rem; }
+    .field { display: grid; gap: 7px; margin-bottom: 16px; }
+    .field label { font-size: .9rem; font-weight: 800; }
+    .field input {
+      width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 12px 13px; outline: none;
+    }
+    .field input:focus { border-color: #60a5fa; box-shadow: 0 0 0 3px #dbeafe; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+    .toast {
+      position: fixed; left: 50%; bottom: 22px; transform: translate(-50%, 20px);
+      background: #0f172a; color: #fff; border-radius: 99px; padding: 11px 16px;
+      opacity: 0; pointer-events: none; transition: .25s; z-index: 30; font-size: .9rem;
+    }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+    footer { width: min(1180px, calc(100% - 32px)); margin: 0 auto; color: var(--muted); font-size: .84rem; text-align: center; }
+    @media (max-width: 720px) {
+      .topbar { padding: 26px 16px 38px; }
+      .topbar-inner, main, footer { width: min(100% - 24px, 1180px); }
+      main { margin-top: -18px; }
+      .toolbar { align-items: stretch; }
+      .toolbar-group { width: 100%; }
+      .toolbar-group:last-child { justify-content: flex-end; }
+      .toolbar .btn { flex: 1; }
+      .summary-grid { grid-template-columns: 1fr; gap: 10px; }
+      .summary-card { padding: 15px 17px; }
+      .candidate-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <p class="eyebrow">투표 개표 관리</p>
+        <h1 id="pageTitle" class="title" contenteditable="true" spellcheck="false"
+            aria-label="대제목. 클릭하여 수정할 수 있습니다.">실시간 투표 개표 현황</h1>
+        <p class="title-hint">대제목을 클릭해 수정할 수 있습니다 · Enter 저장 · Escape 취소</p>
+      </div>
+    </header>
+
+    <main>
+      <section class="toolbar" aria-label="개표 관리 도구">
+        <div class="toolbar-group">
+          <button class="btn btn-primary" id="addCandidateBtn">＋ 후보자 추가</button>
+          <button class="btn" id="undoBtn" disabled>↶ 실행 취소</button>
+          <button class="btn btn-danger" id="resetBtn">전체 초기화</button>
+        </div>
+        <div class="toolbar-group">
+          <span class="view-label">표시 방식</span>
+          <button class="btn view-btn active" data-view="number">숫자형</button>
+          <button class="btn view-btn" data-view="tally">정자형</button>
+          <button class="btn view-btn" data-view="graph">그래프형</button>
+        </div>
+      </section>
+
+      <section class="summary-grid" aria-label="전체 통계">
+        <article class="summary-card">
+          <div class="summary-label">전체 득표수</div>
+          <div class="summary-value" id="totalVotes">0표</div>
+        </article>
+        <article class="summary-card">
+          <div class="summary-label">후보자 수</div>
+          <div class="summary-value" id="candidateCount">0명</div>
+        </article>
+        <article class="summary-card">
+          <div class="summary-label">현재 1위</div>
+          <div class="summary-value" id="leaderName">-</div>
+        </article>
+      </section>
+
+      <div class="candidate-header">
+        <h2>후보자별 개표 현황</h2>
+        <span id="updatedAt" class="summary-label">저장 대기</span>
+      </div>
+      <section id="candidateGrid" class="candidate-grid" aria-live="polite"></section>
+      <section id="emptyState" class="empty-state" hidden>
+        <strong>등록된 후보자가 없습니다.</strong>
+        후보자 추가 버튼을 눌러 개표를 시작하세요.
+      </section>
+    </main>
+    <footer>입력한 내용은 이 브라우저의 localStorage에 자동 저장됩니다.</footer>
+  </div>
+
+  <div class="modal-backdrop" id="candidateModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <form class="modal" id="candidateForm">
+      <h3 id="modalTitle">후보자 추가</h3>
+      <div class="field">
+        <label for="candidateNameInput">후보자 이름</label>
+        <input id="candidateNameInput" maxlength="40" required autocomplete="off" placeholder="이름을 입력하세요" />
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn" id="modalCancelBtn">취소</button>
+        <button type="submit" class="btn btn-primary">저장</button>
+      </div>
+    </form>
+  </div>
+  <div class="toast" id="toast"></div>
+
+  <script>
+    (() => {
+      const STORAGE_KEY = "vote-counting-dashboard-v1";
+      const COLORS = ["#2563eb", "#7c3aed", "#db2777", "#ea580c", "#059669", "#0891b2", "#4f46e5", "#65a30d"];
+      const defaultState = {
+        title: "실시간 투표 개표 현황",
+        view: "number",
+        candidates: []
+      };
+
+      let state = loadState();
+      let history = [];
+      let editingId = null;
+      let toastTimer = null;
+
+      const $ = (selector) => document.querySelector(selector);
+      const titleEl = $("#pageTitle");
+      const gridEl = $("#candidateGrid");
+      const emptyEl = $("#emptyState");
+      const modalEl = $("#candidateModal");
+      const formEl = $("#candidateForm");
+      const nameInput = $("#candidateNameInput");
+
+      function loadState() {
+        try {
+          const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+          if (!saved) return structuredClone(defaultState);
+          return {
+            title: typeof saved.title === "string" && saved.title.trim() ? saved.title : defaultState.title,
+            view: ["number", "tally", "graph"].includes(saved.view) ? saved.view : "number",
+            candidates: Array.isArray(saved.candidates) ? saved.candidates.map(c => ({
+              id: String(c.id),
+              name: String(c.name || "이름 없음").slice(0, 40),
+              votes: Math.max(0, Number(c.votes) || 0)
+            })) : []
+          };
+        } catch {
+          return structuredClone(defaultState);
+        }
+      }
+
+      function clone(value) { return JSON.parse(JSON.stringify(value)); }
+      function saveState() {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        $("#updatedAt").textContent = `최근 저장 ${new Date().toLocaleTimeString("ko-KR", {hour: "2-digit", minute: "2-digit"})}`;
+      }
+      function pushHistory() {
+        history.push(clone(state));
+        if (history.length > 50) history.shift();
+        $("#undoBtn").disabled = history.length === 0;
+      }
+      function commit(mutator, message) {
+        pushHistory();
+        mutator();
+        saveState();
+        render();
+        if (message) showToast(message);
+      }
+      function showToast(message) {
+        const el = $("#toast");
+        el.textContent = message;
+        el.classList.add("show");
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => el.classList.remove("show"), 1800);
+      }
+      function totalVotes() {
+        return state.candidates.reduce((sum, c) => sum + c.votes, 0);
+      }
+      function rankedCandidates() {
+        return [...state.candidates].sort((a, b) => b.votes - a.votes || a.name.localeCompare(b.name, "ko"));
+      }
+      function getRank(candidate) {
+        return rankedCandidates().findIndex(c => c.id === candidate.id) + 1;
+      }
+      function tallyString(votes) {
+        const groups = Math.floor(votes / 5);
+        const remainder = votes % 5;
+        return "正".repeat(groups) + (remainder ? " " + "一二三四".slice(0, remainder) : "");
+      }
+      function escapeHtml(value) {
+        return String(value).replace(/[&<>"']/g, ch => ({
+          "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
+        }[ch]));
+      }
+
+      function render() {
+        titleEl.textContent = state.title;
+        document.title = state.title;
+        $("#totalVotes").textContent = `${totalVotes().toLocaleString()}표`;
+        $("#candidateCount").textContent = `${state.candidates.length}명`;
+        const leader = rankedCandidates()[0];
+        $("#leaderName").textContent = leader ? leader.name : "-";
+        document.querySelectorAll(".view-btn").forEach(btn => {
+          btn.classList.toggle("active", btn.dataset.view === state.view);
+        });
+
+        emptyEl.hidden = state.candidates.length !== 0;
+        gridEl.innerHTML = "";
+        const total = totalVotes();
+
+        state.candidates.forEach((candidate, index) => {
+          const rate = total ? (candidate.votes / total * 100) : 0;
+          const rank = getRank(candidate);
+          const color = COLORS[index % COLORS.length];
+          const card = document.createElement("article");
+          card.className = "candidate-card";
+          card.style.setProperty("--accent", color);
+          card.innerHTML = `
+            <div class="card-top">
+              <div>
+                <span class="rank-badge">${rank}위</span>
+                <h3 class="candidate-name">${escapeHtml(candidate.name)}</h3>
+              </div>
+              <div class="candidate-actions">
+                <button class="icon-btn edit-btn" title="후보자 이름 수정" aria-label="${escapeHtml(candidate.name)} 이름 수정">✎</button>
+                <button class="icon-btn delete-btn" title="후보자 삭제" aria-label="${escapeHtml(candidate.name)} 삭제">×</button>
+              </div>
+            </div>
+            <div class="vote-number">${candidate.votes.toLocaleString()}</div>
+            <div class="vote-unit">득표</div>
+            <div class="vote-rate">득표율 ${rate.toFixed(1)}%</div>
+            <div class="tally-wrap">${state.view === "tally" ? `<div class="tally">${tallyString(candidate.votes) || "—"}</div>` : ""}</div>
+            ${state.view === "graph" ? `
+              <div class="bar-track" aria-label="${rate.toFixed(1)}%">
+                <div class="bar-fill" style="width:${rate}%; background: linear-gradient(90deg, ${color}, #93c5fd);"></div>
+              </div>
+              <div class="bar-caption"><span>득표 비율</span><strong>${rate.toFixed(1)}%</strong></div>
+            ` : ""}
+            <div class="vote-controls">
+              <button class="btn btn-minus minus-btn">− 1표</button>
+              <button class="btn btn-plus plus-btn">＋ 1표</button>
+            </div>
+          `;
+          card.querySelector(".plus-btn").addEventListener("click", () => {
+            commit(() => candidate.votes += 1, `${candidate.name} 후보에게 1표를 추가했습니다.`);
+          });
+          card.querySelector(".minus-btn").addEventListener("click", () => {
+            if (candidate.votes <= 0) return showToast("득표수는 0보다 작아질 수 없습니다.");
+            commit(() => candidate.votes -= 1, `${candidate.name} 후보의 표를 1개 취소했습니다.`);
+          });
+          card.querySelector(".edit-btn").addEventListener("click", () => openModal(candidate));
+          card.querySelector(".delete-btn").addEventListener("click", () => {
+            if (confirm(`'${candidate.name}' 후보를 삭제할까요?`)) {
+              commit(() => state.candidates = state.candidates.filter(c => c.id !== candidate.id), "후보자를 삭제했습니다.");
+            }
+          });
+          gridEl.appendChild(card);
+        });
+      }
+
+      function openModal(candidate = null) {
+        editingId = candidate ? candidate.id : null;
+        $("#modalTitle").textContent = candidate ? "후보자 이름 수정" : "후보자 추가";
+        nameInput.value = candidate ? candidate.name : "";
+        modalEl.classList.add("open");
+        setTimeout(() => nameInput.focus(), 0);
+      }
+      function closeModal() {
+        modalEl.classList.remove("open");
+        editingId = null;
+        formEl.reset();
+      }
+
+      titleEl.addEventListener("focus", () => {
+        titleEl.dataset.original = state.title;
+        const range = document.createRange();
+        range.selectNodeContents(titleEl);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+      });
+      titleEl.addEventListener("keydown", e => {
+        if (e.key === "Enter") { e.preventDefault(); titleEl.blur(); }
+        if (e.key === "Escape") {
+          e.preventDefault();
+          titleEl.textContent = titleEl.dataset.original || state.title;
+          titleEl.blur();
+        }
+      });
+      titleEl.addEventListener("blur", () => {
+        const next = titleEl.textContent.replace(/\s+/g, " ").trim().slice(0, 80);
+        const previous = state.title;
+        if (!next) { titleEl.textContent = previous; return; }
+        if (next !== previous) {
+          commit(() => state.title = next, "대제목을 저장했습니다.");
+        } else {
+          titleEl.textContent = state.title;
+        }
+      });
+
+      $("#addCandidateBtn").addEventListener("click", () => openModal());
+      $("#modalCancelBtn").addEventListener("click", closeModal);
+      modalEl.addEventListener("click", e => { if (e.target === modalEl) closeModal(); });
+      formEl.addEventListener("submit", e => {
+        e.preventDefault();
+        const name = nameInput.value.replace(/\s+/g, " ").trim();
+        if (!name) return;
+        if (editingId) {
+          commit(() => {
+            const candidate = state.candidates.find(c => c.id === editingId);
+            if (candidate) candidate.name = name;
+          }, "후보자 이름을 수정했습니다.");
+        } else {
+          commit(() => state.candidates.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), name, votes: 0 }),
+            "후보자를 추가했습니다.");
+        }
+        closeModal();
+      });
+
+      document.querySelectorAll(".view-btn").forEach(btn => {
+        btn.addEventListener("click", () => commit(() => state.view = btn.dataset.view, "표시 방식을 변경했습니다."));
+      });
+      $("#undoBtn").addEventListener("click", () => {
+        if (!history.length) return;
+        state = history.pop();
+        saveState();
+        render();
+        $("#undoBtn").disabled = history.length === 0;
+        showToast("직전 작업을 취소했습니다.");
+      });
+      $("#resetBtn").addEventListener("click", () => {
+        if (!confirm("후보자와 득표수를 모두 초기화할까요? 이 작업은 실행 취소할 수 있습니다.")) return;
+        commit(() => state = { title: state.title, view: state.view, candidates: [] }, "전체 개표 현황을 초기화했습니다.");
+      });
+
+      window.addEventListener("storage", e => {
+        if (e.key === STORAGE_KEY && e.newValue) {
+          state = loadState();
+          render();
+          showToast("다른 탭의 변경 내용을 불러왔습니다.");
+        }
+      });
+
+      render();
+    })();
+  </script>
+</body>
+</html>
